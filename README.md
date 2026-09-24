@@ -1,97 +1,99 @@
 # ani-cat
 
-Catálogo de anime para la terminal. Consulta [AniList](https://anilist.co/) para mostrar series ordenadas por tendencias, popularidad, fecha de estreno o puntuación. Al elegir una serie, abre su búsqueda en [ani-cli](https://github.com/pystardust/ani-cli).
+Browse anime from your terminal. `ani-cat` uses [AniList](https://anilist.co/) to list shows by trending status, popularity, release date, or score. Selecting a show searches for it in [ani-cli](https://github.com/pystardust/ani-cli).
 
-`ani-cat` es un proyecto independiente. No está afiliado con AniList ni con `ani-cli`, y no incluye el código de `ani-cli`. El crédito por el reproductor y la búsqueda de episodios corresponde a [pystardust y las personas que contribuyen a ani-cli](https://github.com/pystardust/ani-cli/graphs/contributors).
+`ani-cat` is an independent project. It is not affiliated with AniList or `ani-cli`, and it does not include `ani-cli` code. Credit for anime search and playback goes to [pystardust and the ani-cli contributors](https://github.com/pystardust/ani-cli/graphs/contributors).
 
-## Requisitos
+## Requirements
 
-- Linux con `sh`, `curl`, `jq`, `fzf` y las utilidades GNU `date` y `stat`.
-- [`ani-cli`](https://github.com/pystardust/ani-cli) instalado y accesible desde `PATH`. Si está en otra ubicación, se puede indicar con `ANI_CAT_ANI_CLI`.
-- Un reproductor compatible con `ani-cli`, como `mpv`.
-- Conexión a Internet para consultar páginas que no estén guardadas en caché.
+- Linux with `sh`, `curl`, `jq`, `fzf`, and GNU `date` and `stat`.
+- [`ani-cli`](https://github.com/pystardust/ani-cli) installed and available on `PATH`. Set `ANI_CAT_ANI_CLI` if it is elsewhere.
+- A player supported by `ani-cli`, such as `mpv`.
+- An Internet connection for pages that are not cached.
 
-En Arch Linux u Omarchy, puedes instalar las dependencias de los repositorios oficiales así:
+On Arch Linux or Omarchy, install the dependencies from the official repositories:
 
 ```sh
 sudo pacman -S --needed curl jq fzf mpv
 ```
 
-`ani-cli` está en AUR. Si usas `yay`:
+`ani-cli` is available from the AUR. If you use `yay`:
 
 ```sh
 yay -S ani-cli
 ```
 
-Consulta el [README de ani-cli](https://github.com/pystardust/ani-cli#installation) para otras distribuciones y métodos de instalación.
+See the [ani-cli installation guide](https://github.com/pystardust/ani-cli#installation) for other distributions and installation methods.
 
-## Instalación
+## Installation
 
-Descarga o clona este repositorio, entra en su directorio y ejecuta:
+Clone the repository and run the installer:
 
 ```sh
+git clone https://github.com/nbfrodri/ani-cat.git
+cd ani-cat
 ./install.sh
 ```
 
-El instalador copia `ani-cat` a `~/.local/bin`. En Omarchy también crea un acceso llamado **ani-cat** en **Apps**. Si `~/.local/bin` no está en tu `PATH`, añádelo a la configuración de tu shell o ejecuta el archivo con su ruta completa.
+The installer copies `ani-cat` to `~/.local/bin`. On Omarchy, it also adds **ani-cat** to **Apps**. If `~/.local/bin` is not on your `PATH`, add it to your shell configuration or run the executable by its full path.
 
-Para instalarlo en otro directorio:
+To install it elsewhere:
 
 ```sh
 ANI_CAT_INSTALL_DIR="$HOME/bin" ./install.sh
 ```
 
-Después, para actualizarlo, descarga los cambios del repositorio y vuelve a ejecutar `./install.sh`.
+To update, run `git pull` in the cloned repository, then run `./install.sh` again.
 
-## Uso
+## Usage
 
 ```sh
 ani-cat
-ani-cat tendencias
-ani-cat populares
-ani-cat recientes
-ani-cat puntuacion
+ani-cat trending
+ani-cat popular
+ani-cat recent
+ani-cat score
 ```
 
-Sin argumentos, `ani-cat` pide el orden. Cada página muestra hasta 25 series. Si hay más resultados, puedes seguir avanzando; no hay un límite fijo de 50 series.
+Without arguments, `ani-cat` asks how to sort the catalog. Each page shows up to 25 shows. You can keep paging while AniList has more results.
 
-| Tecla | Acción |
+| Key | Action |
 | --- | --- |
-| `↑` / `↓` | Moverse por la lista |
-| `→` o `Ctrl+N` | Página siguiente |
-| `←` o `Ctrl+P` | Página anterior |
-| `Ctrl+O` | Cambiar el orden |
-| `Enter` | Buscar en `ani-cli` con el título inglés |
-| `Ctrl+R` | Buscar con el título romanizado |
-| `Ctrl+B` | Escribir otro título para la búsqueda |
-| `Esc` | Salir |
+| `↑` / `↓` | Move through the list |
+| `→` or `Ctrl+N` | Next page |
+| `←` or `Ctrl+P` | Previous page |
+| `Ctrl+O` | Change sort order |
+| `Enter` | Search in `ani-cli` using the English title |
+| `Ctrl+R` | Search using the romaji title |
+| `Ctrl+B` | Enter a different search title |
+| `Esc` | Quit |
 
-La opción **más recientes** ordena por fecha de estreno y excluye fechas futuras. La **puntuación** mostrada es la valoración media de AniList sobre 100.
+**Most recent** sorts by release date and excludes future dates. Scores are AniList average scores out of 100.
 
-### Títulos y disponibilidad
+### Titles and availability
 
-AniList proporciona la información del catálogo; `ani-cli` consulta su propia fuente para encontrar episodios. Los nombres y la disponibilidad pueden diferir. Si la búsqueda inicial no encuentra la serie adecuada, vuelve al catálogo y prueba `Ctrl+R` o `Ctrl+B`. `ani-cat` muestra el texto que envía a `ani-cli` antes de abrirlo.
+AniList provides the catalog data; `ani-cli` uses its own source to find episodes. Titles and availability may differ. If the first search does not find the right show, return to the catalog and try `Ctrl+R` or `Ctrl+B`. `ani-cat` prints the exact search text before launching `ani-cli`.
 
-Si tu ejecutable de `ani-cli` está fuera de `PATH`:
+If your `ani-cli` executable is outside `PATH`:
 
 ```sh
-ANI_CAT_ANI_CLI="$HOME/otro-directorio/ani-cli" ani-cat
+ANI_CAT_ANI_CLI="$HOME/another-directory/ani-cli" ani-cat
 ```
 
-### Caché y errores de red
+### Cache and network errors
 
-Las respuestas de AniList se guardan durante 10 minutos en `${XDG_CACHE_HOME:-~/.cache}/ani-cat`. Al volver a una página reciente se usa la copia local. Si falla la conexión y existe una copia más antigua, `ani-cat` la muestra con un aviso.
+AniList responses are cached for 10 minutes in `${XDG_CACHE_HOME:-~/.cache}/ani-cat`. Revisiting a recent page uses the local copy. If the connection fails and an older copy exists, `ani-cat` shows it with a warning.
 
-La consulta de títulos se hace a la [API pública de AniList](https://docs.anilist.co/guide/graphql/) mediante HTTPS. `ani-cat` no pide credenciales ni envía información de uso propia. La reproducción y la búsqueda de episodios dependen de `ani-cli`.
+Catalog queries go to the [public AniList API](https://docs.anilist.co/guide/graphql/) over HTTPS. `ani-cat` does not ask for credentials or send its own usage data. Playback and episode search depend on `ani-cli`.
 
-## Desinstalación
+## Uninstall
 
 ```sh
 rm "$HOME/.local/bin/ani-cat"
 ```
 
-En Omarchy, elimina también el acceso de Apps con `omarchy tui remove ani-cat`. Si elegiste otro directorio en la instalación, borra el ejecutable de ese directorio. La caché está en `${XDG_CACHE_HOME:-~/.cache}/ani-cat` y se puede borrar por separado.
+On Omarchy, also remove the Apps entry with `omarchy tui remove ani-cat`. If you chose another installation directory, remove the executable there. You can delete the cache in `${XDG_CACHE_HOME:-~/.cache}/ani-cat` separately.
 
-## Licencia
+## License
 
-El código de `ani-cat` se distribuye bajo la [licencia MIT](LICENSE). `ani-cli` es un proyecto independiente y conserva su propia licencia.
+`ani-cat` is distributed under the [MIT license](LICENSE). `ani-cli` is an independent project with its own license.
