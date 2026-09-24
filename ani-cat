@@ -1,0 +1,163 @@
+#!/bin/sh
+set -eu
+
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/ani-cat"
+for dependency in curl fzf jq date stat; do
+    if ! command -v "$dependency" >/dev/null 2>&1; then
+        printf 'Falta la dependencia: %s\n' "$dependency" >&2
+        exit 1
+    fi
+done
+
+ani_cli_bin=${ANI_CAT_ANI_CLI:-ani-cli}
+if ! command -v "$ani_cli_bin" >/dev/null 2>&1; then
+    if [ -z "${ANI_CAT_ANI_CLI:-}" ] && [ -x "$HOME/.local/bin/ani-cli" ]; then
+        ani_cli_bin=$HOME/.local/bin/ani-cli
+    else
+        printf 'No se encuentra ani-cli. Instálalo o define ANI_CAT_ANI_CLI.\n' >&2
+        exit 1
+    fi
+fi
+mkdir -p "$cache_dir"
+
+choose_order() {
+    choice=$(printf '%b\n' \
+        'tendencias\tTendencias' \
+        'populares\tPopularidad' \
+        'recientes\tMás recientes' \
+        'puntuacion\tMejor puntuación' |
+        fzf --layout=reverse --no-sort --border \
+            --delimiter='\t' --with-nth=2 \
+            --footer='Enter: elegir · Esc: salir' \
+            --prompt='Ordenar por > ') || exit 0
+    order=$(printf '%s' "$choice" | cut -f 1)
+}
+
+usage() {
+    printf 'Uso: ani-cat [tendencias|populares|recientes|puntuacion]\n'
+}
+
+case "${1:-}" in
+    '') choose_order ;;
+    tendencias|populares|recientes|puntuacion) order=$1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+esac
+
+fetch_page() {
+    fetch_order=$1
+    fetch_page_number=$2
+    fetch_sort=$3
+    fetch_before=$4
+    cache_file="$cache_dir/$fetch_order-$fetch_page_number-$(date +%Y%m%d).json"
+
+    if [ -s "$cache_file" ]; then
+        age=$(($(date +%s) - $(stat -c %Y "$cache_file")))
+        if [ "$age" -lt 600 ]; then
+            cat "$cache_file"
+            return 0
+        fi
+    fi
+
+    printf 'Cargando %s, página %s...\n' "$fetch_order" "$fetch_page_number" >&2
+    if [ "$fetch_order" = recientes ]; then
+        query='query ($page: Int!, $sort: [MediaSort], $before: FuzzyDateInt) { Page(page: $page, perPage: 25) { pageInfo { hasNextPage } media(type: ANIME, sort: $sort, startDate_lesser: $before) { title { romaji english } averageScore startDate { year } } } }'
+        payload=$(jq -n --arg query "$query" --arg sort "$fetch_sort" \
+            --argjson page "$fetch_page_number" --argjson before "$fetch_before" \
+            '{query: $query, variables: {page: $page, sort: [$sort], before: $before}}')
+    else
+        query='query ($page: Int!, $sort: [MediaSort]) { Page(page: $page, perPage: 25) { pageInfo { hasNextPage } media(type: ANIME, sort: $sort) { title { romaji english } averageScore startDate { year } } } }'
+        payload=$(jq -n --arg query "$query" --arg sort "$fetch_sort" \
+            --argjson page "$fetch_page_number" \
+            '{query: $query, variables: {page: $page, sort: [$sort]}}')
+    fi
+
+    if ! response=$(curl -fsS --compressed --connect-timeout 5 --max-time 15 \
+        -X POST https://graphql.anilist.co \
+        -H 'Content-Type: application/json' --data "$payload"); then
+        if [ -s "$cache_file" ]; then
+            printf 'Sin conexión; usando la página guardada.\n' >&2
+            cat "$cache_file"
+            return 0
+        fi
+        printf 'No se pudo consultar AniList.\n' >&2
+        return 1
+    fi
+
+    if ! printf '%s' "$response" |
+        jq -e '(.data.Page.media | type) == "array" and (.errors | not)' >/dev/null; then
+        printf '%s' "$response" |
+            jq -r '.errors[]?.message // "Respuesta no válida de AniList"' >&2
+        return 1
+    fi
+
+    temp_file="$cache_file.tmp.$$"
+    printf '%s\n' "$response" > "$temp_file"
+    mv "$temp_file" "$cache_file"
+    printf '%s\n' "$response"
+}
+
+page=1
+while :; do
+    before=null
+    case "$order" in
+        tendencias) sort=TRENDING_DESC; label=Tendencias ;;
+        populares) sort=POPULARITY_DESC; label=Popularidad ;;
+        recientes)
+            sort=START_DATE_DESC; label='Más recientes'
+            before=$(date -d tomorrow +%Y%m%d) ;;
+        puntuacion) sort=SCORE_DESC; label='Mejor puntuación' ;;
+    esac
+
+    response=$(fetch_page "$order" "$page" "$sort" "$before") || exit 1
+    has_next=$(printf '%s' "$response" | jq -r '.data.Page.pageInfo.hasNextPage')
+    entries=$(printf '%s' "$response" | jq -r '
+        .data.Page.media[] |
+        [(.title.english // .title.romaji // "Sin título"),
+         (.startDate.year // "?"),
+         (if .averageScore then (.averageScore | tostring) + "/100" else "—" end),
+         (.title.english // ""),
+         (.title.romaji // "")] |
+        map(tostring | gsub("[\t\r\n]"; " ")) | @tsv')
+
+    footer=$(printf 'Enter: buscar título inglés · Ctrl+R: romanizado · Ctrl+B: escribir título\n→/Ctrl+N: siguiente · ←/Ctrl+P: anterior · Ctrl+O: cambiar orden · Esc: salir')
+    result=$(printf '%s\n' "$entries" |
+        fzf --layout=reverse --no-sort --border \
+            --delimiter='\t' --with-nth=1,2,3 \
+            --header="$label · página $page · 25 por página" \
+            --footer="$footer" \
+            --expect=right,left,ctrl-n,ctrl-p,ctrl-o,ctrl-r,ctrl-b \
+            --prompt='Anime > ') || exit 0
+
+    key=$(printf '%s\n' "$result" | sed -n '1p')
+    item=$(printf '%s\n' "$result" | sed -n '2p')
+    case "$key" in
+        right|ctrl-n)
+            if [ "$has_next" = true ]; then page=$((page + 1)); fi
+            continue ;;
+        left|ctrl-p)
+            if [ "$page" -gt 1 ]; then page=$((page - 1)); fi
+            continue ;;
+        ctrl-o) choose_order; page=1; continue ;;
+        ctrl-b)
+            printf 'Buscar en ani-cli: ' >&2
+            IFS= read -r search_query || exit 0
+            [ -n "$search_query" ] || continue ;;
+        ctrl-r)
+            [ -n "$item" ] || continue
+            search_query=$(printf '%s' "$item" | cut -f 5) ;;
+        '')
+            [ -n "$item" ] || continue
+            search_query=$(printf '%s' "$item" | cut -f 4)
+            if [ -z "$search_query" ]; then
+                search_query=$(printf '%s' "$item" | cut -f 5)
+            fi ;;
+        *) continue ;;
+    esac
+
+    [ -n "$search_query" ] || continue
+    printf 'Buscando en ani-cli: %s\n' "$search_query" >&2
+    if ! "$ani_cli_bin" "$search_query"; then
+        printf 'Prueba Ctrl+R (romanizado) o Ctrl+B (otro título).\n' >&2
+    fi
+done
